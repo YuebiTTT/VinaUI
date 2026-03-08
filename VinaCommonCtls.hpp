@@ -43,224 +43,216 @@ public:
 		this->cx = cx;
 		this->cy = cy;
 	}
+
 	virtual void CreateCtl(HWND hWnd, HRT hdc)
 	{
-		if (Isvalid == false)return;
-		RECT rc;
-		GetClientRect(hWnd, &rc);
-		if (this->IsPushed == true)
-		{
-			if (flag == 0)
-			{
-				GlobalAnimationCount++;
-				flag = 1;
-			}
-			if (ap < 10)
-			{
-				if (flag == 1)
-					ap++;
-			}
-			if (ap >= 10)
-			{
-				flag = 0;
-				GlobalAnimationCount--;
-			}
+		if (Isvalid == false) return;
 
-			float num;
-			num = CalcBounceCurve(ap, 0, 0.5, 10);
-			/*
-			CompGdiD2D(hWnd, hdc, [this, num](HWND hWnd, HDC hdc) {
-				VertexUI::Window::SimpleShadow::iDropShadow Shadow;
-				Shadow.SetSharpness(15);
-				Shadow.SetColor(VuiCalcShadow(VERTEXUICOLOR_DARKNIGHT));
-				Shadow.SetSize(5 + num * 10);
-				Shadow.SetDarkness(100 - (10 - ap) * 5);
-				Shadow.SetPosition(0, 0);
-				Shadow.Create(hdc, this->x, this->y, this->cx, this->cy, 8);
-				});
-				*/
-			unsigned long nClr;
-			int nR, nG, nB;
-			nR = GetMaxValue(GetRValue(Clr) + num * 20, 255);
-			nG = GetMaxValue(GetGValue(Clr) + num * 20, 255);
-			nB = GetMaxValue(GetBValue(Clr) + num * 20, 255);
+		VinaWindow* parent = vinaWinMap[this->hWnd];
+
+		// --- 按下动画触发逻辑 ---
+		if (IsPushed && !wasPushed) {
+			// 开始按下动画（pressProgress 从当前值到 1.0）
+			if (parent) {
+				if (pressAnimationId != -1) {
+					parent->StopAnimation(pressAnimationId);
+					pressAnimationId = -1;
+				}
+				pressAnimationId = parent->AnimateVariableWithBezier<double>(
+					hWnd, pressProgress, pressProgress, 1.0, 0.25, 0.25, 0.1, 0.25, 1.0
+				);
+			}
+			else {
+				pressProgress = 1.0;
+			}
+		}
+		else if (!IsPushed && wasPushed) {
+			// 结束按下动画（pressProgress 从当前值到 0.0）
+			if (parent) {
+				if (pressAnimationId != -1) {
+					parent->StopAnimation(pressAnimationId);
+					pressAnimationId = -1;
+				}
+				pressAnimationId = parent->AnimateVariableWithBezier<double>(
+					hWnd, pressProgress, pressProgress, 0.0, 0.25, 0.25, 0.1, 0.25, 1.0
+				);
+			}
+			else {
+				pressProgress = 0.0;
+			}
+		}
+
+		// --- 悬停动画触发逻辑 ---
+		if (IsHoverd && !isHovering && hoverProgress < 1.0) {
+			isHovering = true;
+			if (parent) {
+				if (hoverAnimationId != -1) {
+					parent->StopAnimation(hoverAnimationId);
+					hoverAnimationId = -1;
+				}
+				hoverAnimationId = parent->AnimateVariableWithBezier<double>(
+					hWnd, hoverProgress, hoverProgress, 1.0, 0.25, 0.25, 0.1, 0.25, 1.0
+				);
+			}
+			else {
+				hoverProgress = 1.0;
+			}
+		}
+		else if (!IsHoverd && isHovering && hoverProgress > 0.0) {
+			isHovering = false;
+			if (parent) {
+				if (hoverAnimationId != -1) {
+					parent->StopAnimation(hoverAnimationId);
+					hoverAnimationId = -1;
+				}
+				hoverAnimationId = parent->AnimateVariableWithBezier<double>(
+					hWnd, hoverProgress, hoverProgress, 0.0, 0.15, 0.42, 0.0, 0.58, 1.0
+				);
+			}
+			else {
+				hoverProgress = 0.0;
+			}
+		}
+
+		// 更新状态记录
+		wasPushed = IsPushed;
+
+		// 根据当前进度计算偏移量 num
+		double num = 0.0;
+		if (pressProgress > 0.0) {
+			num = CalcBounceCurve(pressProgress * 10, 0, 0.5, 10);
+		}
+		else if (hoverProgress > 0.0) {
+			num = CalcEaseOutCurve(hoverProgress * 10, 0, 0.5, 10);
+		}
+
+		// 颜色增强
+		unsigned long nClr = Clr;
+		if (num > 0.0) {
+			int nR = GetMaxValue(GetRValue(Clr) + (int)(num * 20), 255);
+			int nG = GetMaxValue(GetGValue(Clr) + (int)(num * 20), 255);
+			int nB = GetMaxValue(GetBValue(Clr) + (int)(num * 20), 255);
 			nClr = RGB(nR, nG, nB);
-			unsigned long bClr = VERTEXUICOLOR_MIDNIGHTPLUS;
-			if (this->cy == this->cx)bClr = VuiDarkenColor(nClr,50);
-			D2DDrawRoundRect(hdc, x + num, y + num, cx - num * 2, cy - num * 2, VuiFadeColor(nClr, 10), rdsize, 1, 1.0f, bClr);
-			D2DDrawRoundRect(hdc, x + num, y + num, cx - num * 2, cy - 2 - num * 2, nClr, rdsize);
-
-			D2DDrawText2(hdc, txt.c_str(), x, (float)(y + cy / 2 - txtsz / 1.5), cx, cy, txtsz - num, txtClr, L"Segoe UI", 1, true);
 		}
-		else if (this->IsHoverd == true)
-		{
-			if (flag == 0)
-			{
-				GlobalAnimationCount++;
-				flag = 1;
-			}
-			if (ap < 10)
-			{
-				if (flag == 1)
-					ap++;
-			}
-			if (ap >= 10)
-			{
-				flag = 0;
-				GlobalAnimationCount--;
-			}
 
-			float num;
-			num = CalcEaseOutCurve(ap, 0, 0.5, 10);
-			/*
-			CompGdiD2D(hWnd, hdc, [this, num](HWND hWnd, HDC hdc) {
-				VertexUI::Window::SimpleShadow::iDropShadow Shadow;
-				Shadow.SetSharpness(15);
-				Shadow.SetColor(VuiCalcShadow(VERTEXUICOLOR_DARKNIGHT));
-				Shadow.SetSize(5 + num * 10);
-				Shadow.SetDarkness(100 - (10 - ap) * 5);
-				Shadow.SetPosition(0, 0);
-				Shadow.Create(hdc, this->x, this->y, this->cx, this->cy, 8);
-				});
-				*/
-			unsigned long nClr;
-			int nR, nG, nB;
-			nR = GetMaxValue(GetRValue(Clr) + num * 20, 255);
-			nG = GetMaxValue(GetGValue(Clr) + num * 20, 255);
-			nB = GetMaxValue(GetBValue(Clr) + num * 20, 255);
-			nClr = RGB(nR, nG, nB);
-			unsigned long bClr = VERTEXUICOLOR_MIDNIGHTPLUS;
-			if (this->cy == this->cx)bClr = VuiDarkenColor(nClr, 50);
-			D2DDrawRoundRect(hdc, x - num, y - num, cx + num * 2, cy + num * 2, VuiFadeColor(nClr, 10), rdsize, 1, 1.0f+num, bClr);
-			D2DDrawRoundRect(hdc, x - num, y - num, cx + num * 2, cy - 2 + num * 2, nClr, rdsize);
+		// 绘制
+		unsigned long bClr = VERTEXUICOLOR_MIDNIGHTPLUS;
+		if (this->cy == this->cx) bClr = VuiDarkenColor(nClr, 50);
+		D2DDrawRoundRect(hdc,
+			(float)x + (IsPushed ? num : -num),
+			(float)y + (IsPushed ? num : -num),
+			(float)cx + (IsPushed ? -num * 2 : num * 2),
+			(float)cy + (IsPushed ? -num * 2 : num * 2),
+			VuiFadeColor(nClr, 10), rdsize, 1, 1.0f + (IsPushed ? 0 : (float)num), bClr);
 
-			D2DDrawText2(hdc, txt.c_str(), x, (float)(y + cy / 2 - txtsz / 1.5), cx, cy, txtsz, txtClr, L"Segoe UI", 1, true);
-		}
-		else
-		{
-			if (flag == 0)
-			{
-				GlobalAnimationCount++;
-				flag = 1;
-			}
-			if (ap > 0)
-			{
-				if (flag == 1)
-					ap--;
-			}
-			if (ap == 0)
-			{
-				flag = 0;
-				GlobalAnimationCount--;
-			}
-			float num;
-			num = CalcEaseOutCurve(ap, 0, (float)(0.5), 10);
-			if (ap != 0)
-			{
-				/*
-				CompGdiD2D(hWnd, hdc, [this, num](HWND hWnd, HDC hdc) {
-					VertexUI::Window::SimpleShadow::iDropShadow Shadow;
-					Shadow.SetSharpness(15);
-					Shadow.SetColor(VuiCalcShadow(VERTEXUICOLOR_DARKNIGHT));
-					Shadow.SetSize(5 + num * 10);
-					Shadow.SetDarkness(100 - (10 - ap) * 5);
-					Shadow.SetPosition(0, 0);
-					Shadow.Create(hdc, this->x, this->y, this->cx, this->cy, 8);
-					});
-					*/
-			}
-			unsigned long nClr = Clr;
-			if (ap != 0)
-			{
-				int nR, nG, nB;
-				nR = GetMaxValue(GetRValue(Clr) + num * 20, 255);
-				nG = GetMaxValue(GetGValue(Clr) + num * 20, 255);
-				nB = GetMaxValue(GetBValue(Clr) + num * 20, 255);
-				nClr = RGB(nR, nG, nB);
-			}
-			unsigned long bClr = VERTEXUICOLOR_MIDNIGHTPLUS;
-			if (this->cy == this->cx)bClr = VuiDarkenColor(nClr, 50);
-			
-			D2DDrawRoundRect(hdc, x - num, y - num, cx + num * 2, cy + num * 2, VuiFadeColor(nClr, 10), rdsize, 1, 1.0f, bClr);
-			D2DDrawRoundRect(hdc, x - num, y - num, cx + num * 2, cy - 1 + num * 2, VuiFadeColor(nClr, 5), rdsize);
-			D2DDrawRoundRect(hdc, x - num, y - num, cx + num * 2, cy - 2 + num * 2, nClr, rdsize);
-			D2DDrawText2(hdc, txt.c_str(), x, (float)(y + cy / 2 - txtsz / 1.5), cx, cy, txtsz, txtClr, L"Segoe UI", 1, true);
-		}
+		D2DDrawRoundRect(hdc,
+			(float)x + (IsPushed ? num : -num),
+			(float)y + (IsPushed ? num : -num),
+			(float)cx + (IsPushed ? -num * 2 : num * 2),
+			(float)cy - 2 + (IsPushed ? -num * 2 : num * 2),
+			nClr, rdsize);
+
+		int fontSize = txtsz - (IsPushed ? (int)num : 0);
+		D2DDrawText2(hdc, txt.c_str(),
+			(float)x, (float)(y + cy / 2 - fontSize / 1.5),
+			cx, cy, fontSize, txtClr, L"Segoe UI", 1, true);
 	}
-	void SetValidity(bool v)
-	{
-		Isvalid = v;
-	}
+
+	void SetValidity(bool v) { Isvalid = v; }
+
 	virtual int OnMouseUp()
 	{
-		ap = 0;
-		Refresh(hWnd);
+		// 释放鼠标捕获
+		ReleaseCapture();
+
+		// 结束按下状态
+		IsPushed = false;
+
+		// 调用点击回调（仅在鼠标位于按钮内时触发？原代码总是触发，此处保持原样）
 		func();
-		//if(func)vinaFuncMap[_event.c_str()]();
+
+		Refresh(hWnd);
 		return 0;
 	}
+
 	virtual int OnMouseDown()
 	{
-		ap = 0;
-		this->IsPushed = true;
+		// 捕获鼠标，确保即使移出也能收到 MouseUp
+		SetCapture(hWnd);
+
+		// 进入按下状态
+		IsPushed = true;
+
 		Refresh(hWnd);
 		return 0;
 	}
-	std::wstring GetText()
-	{
-		return this->txt;
-	}
-	std::function<void()> GetOnClick()
-	{
-		return this->func;
-	}
+
+	std::wstring GetText() { return this->txt; }
+	std::function<void()> GetOnClick() { return this->func; }
+
 	virtual int AddEvent(const vinaPoint& pt, vinaEvent eventtype)
 	{
-		if (Isvalid == false)return 0;
-		if (eventtype == vinaEvent::mouseUp)this->OnMouseUp();
-		if (eventtype == vinaEvent::mouseDown)this->OnMouseDown();
+		if (Isvalid == false) return 0;
 
-		if (eventtype == vinaEvent::mouseOver) {
-
+		if (eventtype == vinaEvent::mouseUp) {
+			this->OnMouseUp();
+			this->IsHoverd = false;
+			return 0;
+		}
+		else if (eventtype == vinaEvent::mouseDown) {
+			this->OnMouseDown();
+			this->IsHoverd = false;
+			return 0;
+		}
+		else if (eventtype == vinaEvent::mouseOver) {
 			this->IsHoverd = true;
 			Refresh(hWnd);
+			return 0; 
 		}
+
+		this->IsHoverd = false;
+		Refresh(hWnd);
 		return 0;
 	}
+
 	virtual void CreateInheritedCtl(HWND hWnd, HRT hdc, std::shared_ptr<VinaButton> vuic)
 	{
 		this->hWnd = hWnd;
 		CreateCtl(hWnd, hdc);
 	}
+
 	virtual VertexUIPos GetCurrentRect() {
 		VertexUIPos _{ x,y,cx,cy };
 		return _;
 	}
-	void SetInternalEvent(std::wstring ev)
-	{
-		this->_event = ev;
-	}
-	void SetBorderRadius(float px)
-	{
-		this->rdsize = px;
-	}
+
+	void SetInternalEvent(std::wstring ev) { this->_event = ev; }
+	void SetBorderRadius(float px) { this->rdsize = px; }
+
 	std::wstring txt;
 	std::wstring c;
 	std::wstring _event = L"";
 	unsigned long Clr;
-
 	int id = -1;
+
 protected:
 	bool Isvalid = true;
 	HWND hWnd;
-	int ap = 0;
-	int flag = 0;
+
+	double hoverProgress = 0.0;
+	int hoverAnimationId = -1;
+	bool isHovering = false;
+	double pressProgress = 0.0;
+	int pressAnimationId = -1;
+
+	bool wasPushed = false;
+
 	float txtsz = 15;
 	float rdsize = 8;
 	unsigned long txtClr;
-	std::function<void()>func;
+	std::function<void()> func;
 	std::wstring text;
-};
+}; 
 class VinaSlider : public VertexUIControl {
 public:
 	void Set(int x, int y, int cx, int cy, int Value = -1, unsigned long clr = VERTEXUICOLOR_DARKEN, const wchar_t* placeholder = L"", std::function<void()>events = [] {})
