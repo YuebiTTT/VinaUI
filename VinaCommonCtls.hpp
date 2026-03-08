@@ -52,7 +52,6 @@ public:
 
 		// --- 按下动画触发逻辑 ---
 		if (IsPushed && !wasPushed) {
-			// 开始按下动画（pressProgress 从当前值到 1.0）
 			if (parent) {
 				if (pressAnimationId != -1) {
 					parent->StopAnimation(pressAnimationId);
@@ -67,7 +66,6 @@ public:
 			}
 		}
 		else if (!IsPushed && wasPushed) {
-			// 结束按下动画（pressProgress 从当前值到 0.0）
 			if (parent) {
 				if (pressAnimationId != -1) {
 					parent->StopAnimation(pressAnimationId);
@@ -82,7 +80,7 @@ public:
 			}
 		}
 
-		// --- 悬停动画触发逻辑 ---
+		// --- 悬停动画触发逻辑（保持原样，与VinaSwitch一致）---
 		if (IsHoverd && !isHovering && hoverProgress < 1.0) {
 			isHovering = true;
 			if (parent) {
@@ -99,14 +97,14 @@ public:
 			}
 		}
 		else if (!IsHoverd && isHovering && hoverProgress > 0.0) {
-			isHovering = false;
+			isHovering = false;  // 离开动画启动时设为false
 			if (parent) {
 				if (hoverAnimationId != -1) {
 					parent->StopAnimation(hoverAnimationId);
 					hoverAnimationId = -1;
 				}
 				hoverAnimationId = parent->AnimateVariableWithBezier<double>(
-					hWnd, hoverProgress, hoverProgress, 0.0, 0.15, 0.42, 0.0, 0.58, 1.0
+					hWnd, hoverProgress, hoverProgress, 0.0, 0.15, 0.42, 0.0, 0.58, 1.2  // 持续时间调为1.2
 				);
 			}
 			else {
@@ -117,16 +115,18 @@ public:
 		// 更新状态记录
 		wasPushed = IsPushed;
 
-		// 根据当前进度计算偏移量 num
+		// ===== 关键修改：绘制效果由进度变量驱动，而非状态标志 =====
 		double num = 0.0;
+		// 按下效果优先，只要pressProgress>0就显示按下效果
 		if (pressProgress > 0.0) {
 			num = CalcBounceCurve(pressProgress * 10, 0, 0.5, 10);
 		}
+		// 悬停效果次之，仅当按下效果不存在且hoverProgress>0时
 		else if (hoverProgress > 0.0) {
 			num = CalcEaseOutCurve(hoverProgress * 10, 0, 0.5, 10);
 		}
 
-		// 颜色增强
+		// 颜色增强（基于num，不变）
 		unsigned long nClr = Clr;
 		if (num > 0.0) {
 			int nR = GetMaxValue(GetRValue(Clr) + (int)(num * 20), 255);
@@ -135,7 +135,7 @@ public:
 			nClr = RGB(nR, nG, nB);
 		}
 
-		// 绘制
+		// 绘制（保持不变）
 		unsigned long bClr = VERTEXUICOLOR_MIDNIGHTPLUS;
 		if (this->cy == this->cx) bClr = VuiDarkenColor(nClr, 50);
 		D2DDrawRoundRect(hdc,
@@ -162,27 +162,40 @@ public:
 
 	virtual int OnMouseUp()
 	{
-		// 释放鼠标捕获
 		ReleaseCapture();
 
-		// 结束按下状态
+		// 立即结束按下效果
+		VinaWindow* parent = vinaWinMap[this->hWnd];
+		if (parent) {
+			if (pressAnimationId != -1) {
+				parent->StopAnimation(pressAnimationId);
+				pressAnimationId = -1;
+			}
+		}
+		pressProgress = 0.0;
 		IsPushed = false;
 
-		// 调用点击回调（仅在鼠标位于按钮内时触发？原代码总是触发，此处保持原样）
-		func();
+		// 如果鼠标仍在按钮内，立即将悬停效果设为满值
+		if (IsHoverd) {
+			if (parent) {
+				if (hoverAnimationId != -1) {
+					parent->StopAnimation(hoverAnimationId);
+					hoverAnimationId = -1;
+				}
+			}
+			hoverProgress = 1.0;
+			isHovering = true;  // 标记为悬停状态（无动画）
+		}
 
+		func();
 		Refresh(hWnd);
 		return 0;
 	}
 
 	virtual int OnMouseDown()
 	{
-		// 捕获鼠标，确保即使移出也能收到 MouseUp
 		SetCapture(hWnd);
-
-		// 进入按下状态
 		IsPushed = true;
-
 		Refresh(hWnd);
 		return 0;
 	}
@@ -195,23 +208,24 @@ public:
 		if (Isvalid == false) return 0;
 
 		if (eventtype == vinaEvent::mouseUp) {
+			RECT rect = { x, y, x + cx, y + cy };
+			bool inside = PtInRect(&rect, { (LONG)pt.x, (LONG)pt.y }) != FALSE;
+			this->IsHoverd = inside;
 			this->OnMouseUp();
-			this->IsHoverd = false;
-			return 0;
 		}
 		else if (eventtype == vinaEvent::mouseDown) {
+			this->IsHoverd = true;
 			this->OnMouseDown();
-			this->IsHoverd = false;
-			return 0;
 		}
 		else if (eventtype == vinaEvent::mouseOver) {
 			this->IsHoverd = true;
 			Refresh(hWnd);
-			return 0; 
+		}
+		else if (eventtype == vinaEvent::mouseUnfocus) {
+			this->IsHoverd = false;
+			Refresh(hWnd);
 		}
 
-		this->IsHoverd = false;
-		Refresh(hWnd);
 		return 0;
 	}
 
@@ -239,12 +253,12 @@ protected:
 	bool Isvalid = true;
 	HWND hWnd;
 
+	// 动画相关成员
 	double hoverProgress = 0.0;
 	int hoverAnimationId = -1;
 	bool isHovering = false;
 	double pressProgress = 0.0;
 	int pressAnimationId = -1;
-
 	bool wasPushed = false;
 
 	float txtsz = 15;
@@ -252,6 +266,10 @@ protected:
 	unsigned long txtClr;
 	std::function<void()> func;
 	std::wstring text;
+
+	// 废弃的旧变量
+	int ap;
+	int flag;
 }; 
 class VinaSlider : public VertexUIControl {
 public:
